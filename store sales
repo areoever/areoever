@@ -1,0 +1,198 @@
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import xgboost as xg
+
+
+
+""" import os
+for dirname, _, filenames in os.walk('D:\独角兽兽儿\机器学习\storeinput'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename)) """
+
+
+#读取数据
+oil_df = pd.read_csv("D:\\独角兽兽儿\\机器学习\\storeinput\\oil.csv")
+holidays_df = pd.read_csv("D:\\独角兽兽儿\\机器学习\\storeinput\\holidays_events.csv")
+stores_df = pd.read_csv("D:\\独角兽兽儿\\机器学习\\storeinput\\stores.csv")
+train_df = pd.read_csv("D:\\独角兽兽儿\\机器学习\\storeinput\\train.csv")
+test_df = pd.read_csv("D:\\独角兽兽儿\\机器学习\\storeinput\\test.csv")
+transactions_df = pd.read_csv("D:\\独角兽兽儿\\机器学习\\storeinput\\transactions.csv")
+
+#查看训练集的前部分数据
+#print(train_df.head())
+
+#查看测试集的前部分数据
+#print(test_df.head())
+
+#对于以上数据可发现：训练和测试数据是相同的特征，除了训练数据中的销售
+
+#查看oil集中的数据
+#print(oil_df.head())
+
+#查看holiday集中的数据
+#print(holidays_df.head())
+
+#查看store集中的数据
+#print(stores_df.head())
+
+#查看transaction集中的数据
+#print(transactions_df.head())
+
+#接下来，整理训练集数据
+train_df.isnull().sum()
+#print(train_df.isnull().sum())
+train_df.duplicated().sum()
+#print(train_df.duplicated().sum())
+round(train_df.describe(), 2)
+#print(round(train_df.describe(), 2))
+
+train_df.id.nunique()
+#print(train_df.id.nunique())
+round(train_df.sales.describe(), 2)
+#print(round(train_df.sales.describe(), 2))
+#train_df.info()
+#rint(train_df.info())
+train_df.date = pd.to_datetime(train_df.date)
+""" plt.figure(figsize=(15,8))
+plt.plot(train_df.date, train_df.sales)
+plt.show() """
+
+#按月分组销售
+months_sales = train_df.groupby(train_df['date'].dt.strftime('%B'))['sales'].sum().sort_values()
+""" plt.figure(figsize=(15,8))
+plt.plot(months_sales)
+plt.title("the sales by month", fontsize=15)
+plt.xlabel("the month", fontsize=13)
+plt.ylabel("the sales", fontsize=13)
+plt.show() """
+
+#年销售额
+""" plt.figure(figsize=(15,8))
+train_df.groupby(pd.Grouper(key='date', freq='2D')).sum()['sales'].plot()
+plt.ylabel("the sales", fontsize=15)
+plt.show() 
+
+plt.figure(figsize=(10,8))
+train_df.groupby(pd.Grouper(key='date', freq='1Y')).sum()['sales'].plot()
+plt.title("the sales per year", fontsize=15)
+plt.ylabel("the sales", fontsize=15)
+plt.show()
+ """
+
+ #在图表中可看出2016年后销售额下降
+#train_df.head(2)
+
+#在图表中找到最畅销的品牌
+""" plt.figure(figsize=(15, 8))
+train_df.groupby("family")['family'].count().plot(kind='bar')
+plt.title("the count of each family sales", fontsize=15)
+plt.show() """
+
+#在上面的图表中然而所有的品牌都有相同的数值
+
+#接下来，按月分组促销
+months_pormotions = train_df.groupby(train_df['date'].dt.strftime('%B'))['onpromotion'].sum().sort_values()
+""" plt.figure(figsize=(15,8))
+plt.plot(months_pormotions)
+plt.title("the pormotions by month", fontsize=15)
+
+plt.xlabel("the month", fontsize=13)
+plt.ylabel("the pormotions", fontsize=13)
+plt.show() """
+
+#按年分组促销
+""" plt.figure(figsize=(10,8))
+train_df.groupby(pd.Grouper(key='date', freq='1Y')).sum()['onpromotion'].plot()
+plt.title("the promotion per year", fontsize=15)
+plt.ylabel("the promotions", fontsize=15)
+plt.show() """
+
+#查看每家店的销售额
+stores_sales = train_df.groupby('store_nbr')['sales'].sum()
+stores_sales.sort_values(inplace=True)
+#round(stores_sales, 2))
+
+""" plt.figure(figsize=(10, 8))
+stores_sales[-10:].plot(kind='bar')
+plt.title("The top 10 sales per store", fontsize=15)
+plt.xlabel("the store")
+plt.ylabel("the sales")
+plt.show() """
+
+#商店数据处理
+#stores_df.info()
+#print(stores_df.head(2))
+sales_nums = stores_sales.index
+top_stores = sales_nums[-10:]
+cities = []
+i = 0
+for city in stores_df.city:
+    if stores_df.store_nbr[i] in  top_stores:
+        cities.append(stores_df.city[i])
+    i += 1
+
+cities = np.array(cities)
+cities = pd.Series(cities)
+
+#查看每个城市最高的销售额
+cities.hist()
+""" plt.title("the freq of top sales stores per city")
+plt.ylabel("the count of top stores on the city")
+plt.show() """
+
+#建立模型
+#决策树回归
+train_df.date = pd.to_numeric(train_df.date)
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.preprocessing import LabelEncoder
+le = LabelEncoder()
+train_df.family = le.fit_transform(train_df.family)
+#print(train_df.head(2))
+
+X = train_df.drop(['sales', 'id', 'date'], axis = 1).values
+y = train_df.sales.values
+#print(X.shape)
+#print(y.shape)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
+regressor = DecisionTreeRegressor(max_depth=5, max_leaf_nodes=12, random_state=42)
+regressor.fit(X_train, y_train)
+#print(regressor.score(X_train, y_train))
+#print(regressor.score(X_test, y_test))
+
+
+#线性回归
+""" plt.scatter(train_df.onpromotion, train_df.sales)
+plt.show() """
+#print(train_df.corr())
+
+#利用XGboost回归器
+xgb_r = xg.XGBRegressor(objective ='reg:linear',
+                  n_estimators = 10, seed = 123, max_depth=10)
+xgb_r.fit(X_train, y_train)
+#print(xgb_r.score(X_test, y_test))
+
+#预测
+test_df.family = le.fit_transform(test_df.family)
+print (test_df.head(2))
+X = test_df.drop(["id", "date"], axis=1).values
+print(X.shape)
+print(X[0])
+
+#Xgboost回归模型
+predictions = xgb_r.predict(X)
+test_df['sales'] = predictions
+print(test_df.head(2))
+
+#去除其余四列
+test_df.drop(['store_nbr', 'family', 'onpromotion', 'date'], axis=1, inplace=True)
+print(test_df.head(2))
+
+#将预测值转化为csv文件
+test_df.to_csv('store_submission.csv', index=False)
+print("submission successed")
+
